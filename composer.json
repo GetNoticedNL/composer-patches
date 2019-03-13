@@ -1,0 +1,14 @@
+{
+    "name": "getnoticed/composer-patches",
+    "description": "A package for Composer that allows you to apply patches during install and update of packages.",
+    "type": "composer-plugin",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Wesley Vestjens",
+            "email": "wesley@getnoticed.nl"
+        }
+    ],
+    "minimum-stability": "stable",
+    "require": {}
+}
