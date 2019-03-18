@@ -57,10 +57,6 @@ class PatchesPlugin implements PluginInterface, EventSubscriberInterface, Capabl
 
         // Send MOTD
         OutputUtils::sendMotd($io);
-
-        // Load patches from file
-        $this->loadPatchesFromFile($io, (string)ArrayUtils::get($this->extra, 'patching-patches-file'));
-        $this->applicablePatches = PatchesUtils::getApplicablePatches($this->patches, $io, $composer);
     }
 
     public static function getSubscribedEvents()
@@ -90,6 +86,11 @@ class PatchesPlugin implements PluginInterface, EventSubscriberInterface, Capabl
         $io = $scriptEvent->getIO();
         $composer = $scriptEvent->getComposer();
 
+        // Load patches from file
+        $this->loadPatchesFromFile($io, (string)ArrayUtils::get($this->extra, 'patching-patches-file'));
+        $this->applicablePatches = PatchesUtils::getApplicablePatches($this->patches, $io, $composer);
+
+        // Apply patches
         PatchesUtils::installPatches($this->applicablePatches, $io, $composer);
     }
 
@@ -101,7 +102,8 @@ class PatchesPlugin implements PluginInterface, EventSubscriberInterface, Capabl
     {
         $patchesFilePath = trim($patchesFilePath);
 
-        if (empty($patchesFilePath) || file_exists(realpath($patchesFilePath)) !== true) {
+        if (empty($patchesFilePath)
+            || realpath($patchesFilePath) === false || file_exists(realpath($patchesFilePath)) === false) {
             $this->writeErrorExit(
                 $io,
                 '<error>Patching is enabled, but no valid patch file has been provided. Please correct this error and run Composer again.</error>'
