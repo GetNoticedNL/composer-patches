@@ -99,6 +99,10 @@ class PatchesPlugin implements PluginInterface, EventSubscriberInterface, Capabl
      */
     protected function loadPatchesFromFile(IOInterface $io, ?string $patchesFilePath): void
     {
+        if ($this->isEnabled() !== true) {
+            return;
+        }
+
         $patchesFilePath = trim($patchesFilePath);
 
         if (empty($patchesFilePath) || file_exists(realpath($patchesFilePath)) !== true) {
