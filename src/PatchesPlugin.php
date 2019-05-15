@@ -105,7 +105,8 @@ class PatchesPlugin implements PluginInterface, EventSubscriberInterface, Capabl
 
         $patchesFilePath = trim($patchesFilePath);
 
-        if (empty($patchesFilePath) || file_exists(realpath($patchesFilePath)) !== true) {
+        if (empty($patchesFilePath) || realpath($patchesFilePath) === false
+            || file_exists(realpath($patchesFilePath)) !== true) {
             $this->writeErrorExit(
                 $io,
                 '<error>Patching is enabled, but no valid patch file has been provided. Please correct this error and run Composer again.</error>'
