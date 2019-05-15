@@ -18,6 +18,8 @@ class PatchesPlugin implements PluginInterface, EventSubscriberInterface, Capabl
     const EXIT_CODE_SUCCESS = 0;
     const EXIT_CODE_FAILURE = 1;
 
+    const PATTERN_DETECT_PATCHES_COMPOSER_SOURCE = '(vendor\/)(?P<vendor>[\w\-\_]*)(\/)(?P<package>[\w\-\_]*)(\/)(?P<patchesfile>.*)';
+
     /**
      * @var array
      */
@@ -57,10 +59,6 @@ class PatchesPlugin implements PluginInterface, EventSubscriberInterface, Capabl
 
         // Send MOTD
         OutputUtils::sendMotd($io);
-
-        // Load patches from file
-        $this->loadPatchesFromFile($io, (string)ArrayUtils::get($this->extra, 'patching-patches-file'));
-        $this->applicablePatches = PatchesUtils::getApplicablePatches($this->patches, $io, $composer);
     }
 
     public static function getSubscribedEvents()
@@ -90,14 +88,23 @@ class PatchesPlugin implements PluginInterface, EventSubscriberInterface, Capabl
         $io = $scriptEvent->getIO();
         $composer = $scriptEvent->getComposer();
 
+        if ($this->isEnabled() !== true) {
+            return;
+        }
+
+        // Load patches from file
+        $this->loadPatchesFromFile($io, $composer, (string)ArrayUtils::get($this->extra, 'patching-patches-file'));
+        $this->applicablePatches = PatchesUtils::getApplicablePatches($this->patches, $io, $composer);
+
         PatchesUtils::installPatches($this->applicablePatches, $io, $composer);
     }
 
     /**
      * @param \Composer\IO\IOInterface $io
+     * @param \Composer\Composer       $composer
      * @param string|null              $patchesFilePath
      */
-    protected function loadPatchesFromFile(IOInterface $io, ?string $patchesFilePath): void
+    protected function loadPatchesFromFile(IOInterface $io, Composer $composer, ?string $patchesFilePath): void
     {
         if ($this->isEnabled() !== true) {
             return;
@@ -105,28 +112,62 @@ class PatchesPlugin implements PluginInterface, EventSubscriberInterface, Capabl
 
         $patchesFilePath = trim($patchesFilePath);
 
-        if (empty($patchesFilePath) || realpath($patchesFilePath) === false
-            || file_exists(realpath($patchesFilePath)) !== true) {
-            $this->writeErrorExit(
-                $io,
-                '<error>Patching is enabled, but no valid patch file has been provided. Please correct this error and run Composer again.</error>'
-            );
+        if (empty($patchesFilePath)) {
+            $this->writeErrorExit($io, '<error>Patching is enabled, but no patch file has been given.</error>');
         }
 
-        $patchesData = \json_decode(\file_get_contents($patchesFilePath), true);
+        // Check if patches file is located within package
+        $patchPackage = $patchPackageExists = false;
+        $matchResult = preg_match(
+            sprintf('/%s/', self::PATTERN_DETECT_PATCHES_COMPOSER_SOURCE),
+            $patchesFilePath,
+            $matches
+        );
 
-        if (empty($patchesData) || is_array($patchesData) !== true) {
-            $this->writeErrorExit(
-                $io,
-                sprintf(
-                    '<error>Syntax error in patch file: (%s) %s</error>',
-                    \json_last_error() ?: '-',
-                    \json_last_error_msg() ?: 'No valid data received (check syntax in README.md)'
-                )
-            );
+        if ($matchResult === 1) {
+            $vendorName = $matches['vendor'];
+            $packageName = $matches['package'];
+
+            $patchPackage = true;
+
+            /** @var \Composer\Package\Package[] $allPackages */
+            $allPackages = $composer->getRepositoryManager()->getLocalRepository()->getPackages();
+
+            foreach ($allPackages as $package) {
+                if ($package->getName() === sprintf('%s/%s', $vendorName, $packageName)) {
+                    $patchPackageExists = true;
+                }
+            }
         }
 
-        $this->patches = PatchConverter::convertPatches($patchesData);
+        if ($patchPackage === true && $patchPackageExists === false) {
+            $io->write(
+                '<comment>The patches file should be loaded from a package, but it is not yet installed. Skipping for now.</comment>'
+            );
+        } else {
+            $patchesFilePath = realpath($patchesFilePath);
+
+            if (realpath($patchesFilePath) === false || file_exists(realpath($patchesFilePath)) === false) {
+                $this->writeErrorExit(
+                    $io, '<error>Patching is enabled, but the specified patch file can not be reached.</error>'
+                );
+            }
+
+            $patchesData = \json_decode(\file_get_contents($patchesFilePath), true);
+
+            if (empty($patchesData) || is_array($patchesData) !== true) {
+                $this->writeErrorExit(
+                    $io,
+                    sprintf(
+                        '<error>Syntax error in patch file: (%s) %s</error>',
+                        \json_last_error() ?: '-',
+                        \json_last_error_msg() ?: 'No valid data received (check syntax in README.md)'
+                    )
+                );
+            }
+
+            $this->patches = PatchConverter::convertPatches($patchesData);
+        }
     }
 
     private function writeErrorExit(IOInterface $io, $messages)
