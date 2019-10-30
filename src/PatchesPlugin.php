@@ -212,11 +212,11 @@ class PatchesPlugin implements PluginInterface, EventSubscriberInterface, Capabl
      */
     protected function loadAdditionalPatches(IOInterface $io, Composer $composer)
     {
-        if (empty($this->additionalPatches) || is_array(additionalPatches) !== true) {
+        if (empty($this->additionalPatches) || is_array($this->additionalPatches) !== true) {
             return;
         }
 
-        $this->patches = array_merge($this->patches, PatchConverter::convertPatches(additionalPatches));
+        $this->patches = array_merge($this->patches, PatchConverter::convertPatches($this->additionalPatches));
     }
 
     private function writeErrorExit(IOInterface $io, $messages)
