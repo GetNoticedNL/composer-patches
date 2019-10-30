@@ -89,7 +89,7 @@ class PatchesUtils
             }
 
             // Reinstall package before applying patch
-            if (array_key_exists($package->getName(), $reinstalledPackages) !== true) {
+            if (in_array($package->getName(), $reinstalledPackages) !== true) {
                 $io->write(
                     sprintf(
                         '  - Reinstalling <info>%s</info> (<comment>%s</comment>) for patching',
