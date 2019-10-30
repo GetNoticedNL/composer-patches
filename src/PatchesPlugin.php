@@ -31,6 +31,11 @@ class PatchesPlugin implements PluginInterface, EventSubscriberInterface, Capabl
     private $enabled = false;
 
     /**
+     * @var array
+     */
+    private $additionalPatches = [];
+
+    /**
      * @var \GetNoticed\ComposerPatches\Data\Patch[]
      */
     private $patches = [];
@@ -51,6 +56,7 @@ class PatchesPlugin implements PluginInterface, EventSubscriberInterface, Capabl
         $rootPackage = $composer->getPackage();
         $this->extra = $rootPackage->getExtra();
         $this->enabled = ArrayUtils::get($this->extra, 'patching-enabled', false);
+        $this->additionalPatches = ArrayUtils::get($this->extra, 'patching-additional-patches', []);
 
         // If not enabled, return and stop processing here
         if ($this->isEnabled() !== true) {
@@ -94,6 +100,7 @@ class PatchesPlugin implements PluginInterface, EventSubscriberInterface, Capabl
 
         // Load patches from file
         $this->loadPatchesFromFile($io, $composer, (string)ArrayUtils::get($this->extra, 'patching-patches-file'));
+        $this->loadAdditionalPatches($io, $composer);
         $this->applicablePatches = PatchesUtils::getApplicablePatches($this->patches, $io, $composer);
 
         PatchesUtils::installPatches($this->applicablePatches, $io, $composer);
@@ -168,6 +175,48 @@ class PatchesPlugin implements PluginInterface, EventSubscriberInterface, Capabl
 
             $this->patches = PatchConverter::convertPatches($patchesData);
         }
+
+        if ($patchPackage === true && $patchPackageExists === false) {
+            $io->write(
+                '<comment>The patches file should be loaded from a package, but it is not yet installed. Skipping for now.</comment>'
+            );
+        } else {
+            $patchesFilePath = realpath($patchesFilePath);
+
+            if (realpath($patchesFilePath) === false || file_exists(realpath($patchesFilePath)) === false) {
+                $this->writeErrorExit(
+                    $io, '<error>Patching is enabled, but the specified patch file can not be reached.</error>'
+                );
+            }
+
+            $patchesData = \json_decode(\file_get_contents($patchesFilePath), true);
+
+            if (empty($patchesData) || is_array($patchesData) !== true) {
+                $this->writeErrorExit(
+                    $io,
+                    sprintf(
+                        '<error>Syntax error in patch file: (%s) %s</error>',
+                        \json_last_error() ?: '-',
+                        \json_last_error_msg() ?: 'No valid data received (check syntax in README.md)'
+                    )
+                );
+            }
+
+            $this->patches = PatchConverter::convertPatches($patchesData);
+        }
+    }
+
+    /**
+     * @param \Composer\IO\IOInterface $io
+     * @param \Composer\Composer       $composer
+     */
+    protected function loadAdditionalPatches(IOInterface $io, Composer $composer)
+    {
+        if (empty($this->additionalPatches) || is_array($this->additionalPatches) !== true) {
+            return;
+        }
+
+        $this->patches = array_merge($this->patches, PatchConverter::convertPatches($this->additionalPatches));
     }
 
     private function writeErrorExit(IOInterface $io, $messages)
